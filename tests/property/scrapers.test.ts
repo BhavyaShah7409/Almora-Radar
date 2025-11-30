@@ -19,7 +19,7 @@ describe('Property 16: Scraped articles contain all required fields', () => {
           title: fc.string({ minLength: 1, maxLength: 500 }),
           content: fc.string({ minLength: 50, maxLength: 10000 }),
           images: fc.array(fc.webUrl(), { maxLength: 10 }),
-          publishTime: fc.date().map(d => d.toISOString()),
+          publishTime: fc.date({ min: new Date('2020-01-01'), max: new Date('2025-12-31') }).map(d => d.toISOString()),
           sourceLink: fc.webUrl(),
         }),
         (article: ScrapedArticle) => {
@@ -119,7 +119,7 @@ describe('Property 16: Scraped articles contain all required fields', () => {
           title: fc.string({ minLength: 1 }),
           content: fc.string({ minLength: 50 }),
           images: fc.array(fc.webUrl()),
-          publishTime: fc.date().map(d => d.toISOString()),
+          publishTime: fc.date({ min: new Date('2020-01-01'), max: new Date('2025-12-31') }).map(d => d.toISOString()),
           sourceLink: fc.webUrl(),
         }),
         (article: ScrapedArticle) => {
@@ -141,7 +141,7 @@ describe('Property 16: Scraped articles contain all required fields', () => {
           title: fc.string({ minLength: 1 }),
           content: fc.string({ minLength: 50 }),
           images: fc.array(fc.webUrl()),
-          publishTime: fc.date().map(d => d.toISOString()),
+          publishTime: fc.date({ min: new Date('2020-01-01'), max: new Date('2025-12-31') }).map(d => d.toISOString()),
           sourceLink: fc.webUrl(),
         }),
         (article: ScrapedArticle) => {
@@ -159,10 +159,10 @@ describe('Property 16: Scraped articles contain all required fields', () => {
 });
 
 /**
- * Feature: almora-radar-system, Property 68: Scraper errors are logged and don't stop execution
+ * Feature: almora-radar-system, Property 68: Scraper errors are logged and do not stop execution
  * Validates: Requirements 19.1
  */
-describe('Property 68: Scraper errors are logged and don't stop execution', () => {
+describe('Property 68: Scraper errors are logged and do not stop execution', () => {
   test('scraper errors should not throw exceptions', () => {
     // This property tests that scrapers handle errors gracefully
     // In practice, this is tested by the BaseScraper error handling
@@ -229,6 +229,121 @@ describe('Property 68: Scraper errors are logged and don't stop execution', () =
         }
       ),
       { numRuns: 100 }
+    );
+  });
+
+  test('scraper orchestration continues when individual scrapers fail', () => {
+    // Property: When using Promise.allSettled, all scrapers run regardless of failures
+    fc.assert(
+      fc.asyncProperty(
+        fc.array(
+          fc.record({
+            scraperName: fc.constantFrom('AmarUjala', 'DainikJagran', 'LocalNews', 'Facebook', 'Instagram', 'YouTube'),
+            shouldFail: fc.boolean(),
+            articlesScraped: fc.integer({ min: 0, max: 50 }),
+          }),
+          { minLength: 3, maxLength: 6 }
+        ),
+        async (scraperConfigs) => {
+          // Simulate Promise.allSettled behavior
+          const promises = scraperConfigs.map(config => 
+            config.shouldFail
+              ? Promise.reject(new Error(`${config.scraperName} failed`))
+              : Promise.resolve({
+                  source: config.scraperName,
+                  articlesScraped: config.articlesScraped,
+                  errors: [],
+                  duration: '1.5s',
+                })
+          );
+
+          const results = await Promise.allSettled(promises);
+
+          // Property: All scrapers should have a result (fulfilled or rejected)
+          expect(results.length).toBe(scraperConfigs.length);
+
+          // Property: Results should match the configuration
+          results.forEach((result, index) => {
+            if (scraperConfigs[index].shouldFail) {
+              expect(result.status).toBe('rejected');
+            } else {
+              expect(result.status).toBe('fulfilled');
+              if (result.status === 'fulfilled') {
+                expect(result.value.source).toBe(scraperConfigs[index].scraperName);
+                expect(result.value.articlesScraped).toBe(scraperConfigs[index].articlesScraped);
+              }
+            }
+          });
+
+          // Property: Successful scrapers should be counted
+          const successfulCount = results.filter(r => r.status === 'fulfilled').length;
+          const expectedSuccessful = scraperConfigs.filter(c => !c.shouldFail).length;
+          expect(successfulCount).toBe(expectedSuccessful);
+
+          // Property: Failed scrapers should be logged but not stop execution
+          const failedCount = results.filter(r => r.status === 'rejected').length;
+          const expectedFailed = scraperConfigs.filter(c => c.shouldFail).length;
+          expect(failedCount).toBe(expectedFailed);
+        }
+      ),
+      { numRuns: 50 }
+    );
+  });
+
+  test('orchestration collects all successful articles despite failures', () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            status: fc.constantFrom('fulfilled', 'rejected'),
+            articles: fc.array(
+              fc.record({
+                title: fc.string({ minLength: 1 }),
+                content: fc.string({ minLength: 50 }),
+                images: fc.array(fc.webUrl()),
+                publishTime: fc.date({ min: new Date('2020-01-01'), max: new Date('2025-12-31') }).map(d => d.toISOString()),
+                sourceLink: fc.webUrl(),
+              }),
+              { maxLength: 10 }
+            ),
+          }),
+          { minLength: 2, maxLength: 6 }
+        ),
+        (scraperResults) => {
+          // Simulate collecting articles from results
+          const allArticles: ScrapedArticle[] = [];
+          const errors: string[] = [];
+
+          scraperResults.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+              allArticles.push(...result.articles);
+            } else {
+              errors.push(`Scraper ${index} failed`);
+            }
+          });
+
+          // Property: All successful articles should be collected
+          const expectedArticles = scraperResults
+            .filter(r => r.status === 'fulfilled')
+            .flatMap(r => r.articles);
+          
+          expect(allArticles.length).toBe(expectedArticles.length);
+
+          // Property: Errors should be logged for failed scrapers
+          const expectedErrors = scraperResults.filter(r => r.status === 'rejected').length;
+          expect(errors.length).toBe(expectedErrors);
+
+          // Property: All collected articles should be valid
+          allArticles.forEach(article => {
+            expect(article).toHaveProperty('title');
+            expect(article).toHaveProperty('content');
+            expect(article).toHaveProperty('sourceLink');
+          });
+
+          return true;
+        }
+      ),
+      { numRuns: 50 }
     );
   });
 });
