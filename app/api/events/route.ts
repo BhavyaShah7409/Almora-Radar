@@ -14,8 +14,8 @@ export async function GET(request: NextRequest) {
       category: searchParams.get('category') || undefined,
       startDate: searchParams.get('startDate') || undefined,
       endDate: searchParams.get('endDate') || undefined,
-      limit: parseInt(searchParams.get('limit') || '50'),
-      skip: parseInt(searchParams.get('skip') || '0'),
+      limit: parseInt(searchParams.get('limit') || '50') || 50,
+      skip: parseInt(searchParams.get('skip') || '0') || 0,
     };
 
     const db = await getDatabase();
@@ -42,11 +42,14 @@ export async function GET(request: NextRequest) {
     const total = await eventsCollection.countDocuments(query);
 
     // Get events with pagination
+    const skip = params.skip ?? 0;
+    const limit = params.limit ?? 50;
+    
     const events = await eventsCollection
       .find(query)
       .sort({ createdAt: -1 })
-      .skip(params.skip)
-      .limit(params.limit)
+      .skip(skip)
+      .limit(limit)
       .toArray();
 
     // Format response
@@ -73,7 +76,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       events: formattedEvents,
       total,
-      hasMore: params.skip + params.limit < total,
+      hasMore: skip + limit < total,
     });
   } catch (error) {
     console.error('Error fetching events:', error);
