@@ -46,7 +46,8 @@ Real-time, AI-powered geospatial news intelligence system for Almora, Uttarakhan
 - Supabase account (free tier)
 - Firebase account (free tier)
 - Google Gemini API key
-- Vercel account for deployment
+- Vercel account for deployment (frontend + API)
+- Railway account for cron jobs (free tier)
 
 ### Installation
 
@@ -185,18 +186,31 @@ npm run test:e2e
 
 ## Deployment
 
-### Vercel Deployment
+### Vercel Deployment (Frontend + API)
 
 1. Push your code to GitHub
 2. Import project in Vercel
-3. Configure environment variables in Vercel dashboard
+3. Configure environment variables in Vercel dashboard:
+   - All variables from `.env.local`
+   - Add `CRON_SECRET` for authenticating cron requests
 4. Deploy
 
-### Vercel Cron Jobs
+### Railway Deployment (Cron Jobs)
 
-Configure in `vercel.json`:
-- Scraper: Runs every 30 minutes (`*/30 * * * *`)
-- Cleanup: Runs daily at midnight UTC (`0 0 * * *`)
+Vercel has limitations on cron frequency, so we use Railway for scheduled tasks.
+
+1. Sign up at https://railway.app
+2. Create new project from GitHub repository
+3. Configure environment variables:
+   - `VERCEL_URL`: Your Vercel deployment URL
+   - `CRON_SECRET`: Same secret as in Vercel
+4. Railway will automatically detect `railway.json` and deploy
+
+**Cron Schedule:**
+- Scraper: Every 30 minutes (`*/30 * * * *`)
+- Cleanup: Daily at midnight UTC (`0 0 * * *`)
+
+See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for detailed instructions.
 
 ## Environment Variables
 

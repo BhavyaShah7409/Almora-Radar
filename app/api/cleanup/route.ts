@@ -1,15 +1,20 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/db/mongodb';
 import { supabaseServer } from '@/lib/db/supabase-server';
 import { getDaysAgo } from '@/lib/utils/date';
+import { validateCronRequest, createUnauthorizedResponse } from '@/lib/utils/auth';
 import { DATA_RETENTION_DAYS } from '@/types';
 
 /**
  * POST /api/cleanup
  * Delete events older than 15 days and associated comments
- * Triggered by Vercel Cron daily at midnight UTC
+ * Triggered by Railway Cron daily at midnight UTC
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
+  // Validate cron authentication
+  if (!validateCronRequest(request)) {
+    return createUnauthorizedResponse();
+  }
   try {
     console.log('Starting cleanup job...');
 
