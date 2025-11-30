@@ -4,5 +4,8 @@ nixPkgs = ["nodejs_20"]
 [phases.install]
 cmds = ["npm ci"]
 
+[phases.build]
+cmds = ["echo 'Skipping Next.js build for cron worker'"]
+
 [start]
 cmd = "node cron-worker.js"
